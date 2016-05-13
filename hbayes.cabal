@@ -47,6 +47,9 @@ tested-with: GHC==7.4.1
 -- Constraint on the version of Cabal needed to build this package.
 Cabal-version:       >=1.10
 
+extra-source-files:
+  README.md
+
 data-files: cancer.net
 
 Flag local {
