@@ -1,0 +1,11 @@
+*.o
+*.hi
+Main
+*.dot
+test.png
+dist
+log.txt
+test.net
+Main.prof
+*.nb
+.stack-work/

@@ -1,0 +1,128 @@
+net
+{
+	HR_Compile_TriangMethod = "0";
+	HR_Monitor_GraphPrecision = "100";
+	HRUNTIME_Grid_GridSnap = "1";
+	HRUNTIME_Propagate_AutoSum = "1";
+	HR_Propagate_AutoNormal = "1";
+	HRUNTIME_Monitor_OpenGraph = "0";
+	HR_Font_Size = "-12";
+	HR_Monitor_AutoUpdGraph = "0";
+	node_size = (100.0 40.0);
+	HRUNTIME_Propagate_AutoNormal = "1";
+	HR_Grid_GridSnap = "1";
+	HR_Compile_Compress = "0";
+	HRUNTIME_Compile_Compress = "0";
+	HR_Compile_ApproxEpsilon = "0.00001";
+	jenginegenerator6060830225489488864L = "edu.ucla.belief.inference.JoinTreeSettings@7d399ae5";
+	HR_Color_DiscreteChance = "16";
+	HR_Propagate_AutoSum = "1";
+	HR_Propagate_Auto = "0";
+	HR_Compile_Approximate = "0";
+	HRUNTIME_Monitor_InitStates = "5";
+	HR_Grid_GridShow = "0";
+	HRUNTIME_Font_Name = "Arial";
+	HR_Groups_GroupColors = "";
+	HR_Groups_GroupNames = "";
+	HR_Color_ContinuosChance = "48";
+	HR_Groups_UserGroupsNo = "0";
+	HRUNTIME_Grid_GridShow = "0";
+	HRUNTIME_Propagate_Auto = "0";
+	HR_Color_Decision = "17";
+	HR_Monitor_InitSD = "2";
+	HRUNTIME_Grid_X = "10";
+	HRUNTIME_Grid_Y = "10";
+	HR_Grid_X = "10";
+	HRUNTIME_Compile_TriangMethod = "0";
+	HRUNTIME_Font_Size = "-12";
+	HR_Grid_Y = "10";
+	HR_Font_Name = "Arial";
+	HR_Font_Weight = "400";
+	HR_Monitor_InitStates = "5";
+	HRUNTIME_Monitor_AutoUpdGraph = "0";
+	HR_Font_Italic = "0";
+	HR_Monitor_OpenGraph = "0";
+	HRUNTIME_Font_Weight = "400";
+	HRUNTIME_Font_Italic = "0";
+	HRUNTIME_Compile_Approximate = "0";
+	HR_Color_Utility = "36";
+	HRUNTIME_Monitor_GraphPrecision = "100";
+	HRUNTIME_Compile_ApproxEpsilon = "0.00001";
+}
+
+node D
+{
+	states = ("Present" "Absent" );
+	position = (147 -256);
+	excludepolicy = "include whole CPT";
+	ismapvariable = "false";
+	ID = "D";
+	label = "D: Coma";
+	diagnosistype = "AUXILIARY";
+}
+node E
+{
+	states = ("Present" "Absent" );
+	position = (414 -266);
+	excludepolicy = "include whole CPT";
+	ismapvariable = "false";
+	ID = "E";
+	label = "E: Severe Headaches";
+	diagnosistype = "AUXILIARY";
+}
+node A
+{
+	states = ("Present" "Absent" );
+	position = (131 0);
+	excludepolicy = "include whole CPT";
+	ismapvariable = "false";
+	ID = "A";
+	label = "A:Metastatic Cancer";
+	diagnosistype = "AUXILIARY";
+}
+node C
+{
+	states = ("Present" "Absent" );
+	position = (255 -128);
+	excludepolicy = "include whole CPT";
+	ismapvariable = "false";
+	ID = "C";
+	label = "C:  Brain Tumor";
+	diagnosistype = "AUXILIARY";
+}
+node B
+{
+	states = ("Increased" "Not increased" );
+	position = (0 -128);
+	excludepolicy = "include whole CPT";
+	ismapvariable = "false";
+	ID = "B";
+	label = "B: Serum Calcium";
+	diagnosistype = "AUXILIARY";
+}
+potential ( D | C B )
+{
+	data = (((	0.8	0.2	)
+		(	0.8	0.2	))
+		((	0.8	0.2	)
+		(	0.05	0.95	)));
+}
+potential ( E | C )
+{
+	data = ((	0.8	0.2	)
+		(	0.6	0.4	));
+}
+potential ( A | )
+{
+	data = (	0.2	0.8	);
+}
+potential ( C | A )
+{
+	data = ((	0.2	0.8	)
+		(	0.05	0.95	));
+}
+potential ( B | A )
+{
+	data = ((	0.8	0.2	)
+		(	0.2	0.8	));
+}
