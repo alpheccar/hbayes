@@ -1,14 +1,20 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+
+#if __GLASGOW_HASKELL__ < 710
+{-# LANGUAGE OverlappingInstances #-}
+#endif
+
 {- | Bayesian Network Library.
 
 It is a very preliminary version. It has only been tested on very simple
 examples where it worked. It should be considered as experimental and not used
 in any production work.
 
-* Look at the "Bayes.Examples" and "Bayes.Examples.Tutorial" in this package 
+* Look at the "Bayes.Examples" and "Bayes.Examples.Tutorial" in this package
 to see how to use the library.
 
 * In "Bayes.Examples.Influence" you'll find additional examples about influence diagrams.
@@ -45,7 +51,7 @@ module Bayes(
   , markovBlanket
   -- ** Support functions for Graph constructions
   , Vertex
-  , Edge 
+  , Edge
   , edge
   , newEdge
   , getVertex
@@ -78,8 +84,8 @@ import Bayes.Factor.MaxCPT(MAXCPT(..))
 import Data.Maybe
 import qualified Data.Map as Map
 import qualified Data.Foldable as F
-import qualified Data.Traversable as T 
-import Control.Applicative 
+import qualified Data.Traversable as T
+import Control.Applicative
 import qualified Data.Set as Set
 
 import Test.QuickCheck hiding ((.&.),Testable)
@@ -97,16 +103,16 @@ type SBN f = DirectedSG () f
 
 
 instance Arbitrary (DirectedSG String String) where
-  arbitrary = do 
-    let createVertex g i = do 
+  arbitrary = do
+    let createVertex g i = do
           name <- arbitrary :: Gen String
           return $ addVertex (Vertex i) name g
-        createEdge g (va,vb) = do 
+        createEdge g (va,vb) = do
           name <- arbitrary :: Gen String
-          return $ addEdge (edge va vb) name g 
+          return $ addEdge (edge va vb) name g
 
     nbVertex <- choose (1,8) :: Gen Int
-    
+
     g <- foldM createVertex emptyGraph [1..nbVertex]
 
     let allPairs = [(Vertex x,Vertex y) | x <- [1..nbVertex], y <- [1..nbVertex], x /= y]
@@ -116,16 +122,20 @@ instance Arbitrary (DirectedSG String String) where
 
     foldM createEdge g edges
 
-instance Arbitrary (DirectedSG () String) where
-  arbitrary = do 
-    let createVertex g i = do 
+instance
+#if __GLASGOW_HASKELL__ >= 710
+    {-# OVERLAPPING #-}
+#endif
+    Arbitrary (DirectedSG () String) where
+  arbitrary = do
+    let createVertex g i = do
           name <- arbitrary :: Gen String
           return $ addVertex (Vertex i) name g
-        createEdge g (va,vb) = do 
-          return $ addEdge (edge va vb) () g 
+        createEdge g (va,vb) = do
+          return $ addEdge (edge va vb) () g
 
     nbVertex <- choose (1,8) :: Gen Int
-    
+
     g <- foldM createVertex emptyGraph [1..nbVertex]
 
     let allPairs = [(Vertex x,Vertex y) | x <- [1..nbVertex], y <- [1..nbVertex], x /= y]
@@ -133,22 +143,26 @@ instance Arbitrary (DirectedSG () String) where
 
     edges <- filterM anEdge allPairs
 
-    foldM createEdge g edges   
+    foldM createEdge g edges
 
 -- | Warning : the generated graph is not at all a bayesian network
 -- The variables in the CPT have no reason to correspond to the edges
 -- connected to that CPT.
 -- Only the main variable (first variable) is linked to the right vertex
-instance Factor f => Arbitrary (DirectedSG () f) where
-  arbitrary = do 
-    let createVertex g i = do 
+instance
+#if __GLASGOW_HASKELL__ >= 710
+    {-# OVERLAPPABLE #-}
+#endif
+    Factor f => Arbitrary (DirectedSG () f) where
+  arbitrary = do
+    let createVertex g i = do
           let value = fromJust $ factorWithVariables [DV (Vertex i) 2] [0.1,0.9]
           return $ addVertex (Vertex i) value g
-        createEdge g (va,vb) = do 
-          return $ addEdge (edge va vb) () g 
+        createEdge g (va,vb) = do
+          return $ addEdge (edge va vb) () g
 
     nbVertex <- choose (1,8) :: Gen Int
-    
+
     g <- foldM createVertex emptyGraph [1..nbVertex]
 
     let allPairs = [(Vertex x,Vertex y) | x <- [1..nbVertex], y <- [1..nbVertex], x /= y]
@@ -159,12 +173,12 @@ instance Factor f => Arbitrary (DirectedSG () f) where
     foldM createEdge g edges
 
 testEdgeRemoval_prop :: DirectedSG String String -> Property
-testEdgeRemoval_prop g = (not . hasNoEdges) g ==> 
+testEdgeRemoval_prop g = (not . hasNoEdges) g ==>
   let Just e = someEdge g
       Just (vs,ve) = edgeVertices g e
       Just bi = ingoing g ve
       Just bo = outgoing g vs
-      g' = removeEdge e g 
+      g' = removeEdge e g
       Just bi' = ingoing g' ve
       Just bo' = outgoing g' vs
   in
@@ -174,14 +188,14 @@ testEdgeRemoval_prop g = (not . hasNoEdges) g ==>
 testVertexRemoval_prop :: DirectedSG String String -> Property
 testVertexRemoval_prop g = (not . hasNoVertices) g ==>
     let Just v = someVertex g
-        Just bi = ingoing g v 
+        Just bi = ingoing g v
         Just bo = outgoing g v
         g' = removeVertex v g
         srcVertices = mapMaybe (startVertex g') bi
-        dstVertices = mapMaybe (endVertex g') bo 
+        dstVertices = mapMaybe (endVertex g') bo
         isNotDstVertex = not . (v `elem`) . mapMaybe (endVertex g') . fromJust . outgoing g'
         isNotStartVertex = not . (v `elem`) . mapMaybe (startVertex g') . fromJust . ingoing g'
-    in 
+    in
     (sort (allVertices g) == sort (v:allVertices g')) &&
       (all isNotDstVertex srcVertices) && (all isNotStartVertex dstVertices)
 
@@ -236,13 +250,13 @@ class Graph g where
 
     -- | One extremity of the edge (which is the end only for directed edge)
     endVertex :: g a b -> Edge -> Maybe Vertex
-    endVertex g e = do 
+    endVertex g e = do
       (_,ve) <- edgeVertices g e
-      return ve 
-        
+      return ve
+
     -- | One extremity of the edge (which is the start only for directed edge)
     startVertex :: g a b -> Edge -> Maybe Vertex
-    startVertex g e = do 
+    startVertex g e = do
       (vs,_) <- edgeVertices g e
       return vs
 
@@ -251,7 +265,7 @@ class Graph g where
 
     -- | All values of the graph
     allEdgeValues :: g a b -> [a]
-   
+
     -- | Returns an empty graph
     emptyGraph :: g a b
 
@@ -287,25 +301,25 @@ class Graph g => DirectedGraph g where
     outgoing :: g a b -> Vertex -> Maybe [Edge]
 
 
--- | Return the Markov blanket of a node 
+-- | Return the Markov blanket of a node
 markovBlanket :: DirectedGraph g => g a b -> Vertex -> [Vertex]
-markovBlanket g c = 
+markovBlanket g c =
   let p = parentNodes g c
-      children = childrenNodes g c 
-      parentOfChildrens = concatMap (parentNodes g) children 
-  in 
+      children = childrenNodes g c
+      parentOfChildrens = concatMap (parentNodes g) children
+  in
   nub (c:p ++ children ++ parentOfChildrens)
 
 -- | Return the parents of a node
 parentNodes :: DirectedGraph g => g a b -> Vertex -> [Vertex]
-parentNodes g v = maybe [] id $ do 
+parentNodes g v = maybe [] id $ do
   ie <- ingoing g v
   p <- mapM (startVertex g) ie
   return p
 
 -- | Return the children of a node
 childrenNodes :: DirectedGraph g => g a b -> Vertex -> [Vertex]
-childrenNodes g v = maybe [] id $ do 
+childrenNodes g v = maybe [] id $ do
   ie <- outgoing g v
   p <- mapM (endVertex g) ie
   return p
@@ -313,38 +327,38 @@ childrenNodes g v = maybe [] id $ do
 isRoot :: DirectedGraph g => g a b -> Vertex -> Bool
 {-# INLINE isRoot #-}
 isRoot g v =
-  case ingoing g v of 
-    Just [] -> True 
+  case ingoing g v of
+    Just [] -> True
     _ -> False
 
 -- | Get the root node for the graph
 rootNode :: DirectedGraph g => g a b -> Maybe Vertex
-rootNode g = 
+rootNode g =
   let someRoots = filter (isRoot g) . allVertices $ g
-  in 
-  case someRoots of 
-    (h:l) -> Just h 
+  in
+  case someRoots of
+    (h:l) -> Just h
     _ -> Nothing
 
 -- | Check if the graph is a directed Acyclic graph
-dag :: DirectedGraph g => g a b -> Bool 
-dag g = case rootNode g of 
-  Nothing -> isEmpty g 
+dag :: DirectedGraph g => g a b -> Bool
+dag g = case rootNode g of
+  Nothing -> isEmpty g
   Just r -> dag (removeVertex r g)
 
 -- | Check if the graph is connected
-connectedGraph :: Graph g => g a b -> Bool 
-connectedGraph g = 
+connectedGraph :: Graph g => g a b -> Bool
+connectedGraph g =
   let visited = visitVertex g (Set.empty) ([fromJust $ someVertex g])
       vertices = Set.fromList $ allVertices g
       equalSets a b = Set.isSubsetOf a b && Set.isSubsetOf b a
-  in 
+  in
   equalSets visited vertices
- where 
+ where
   visitVertex _ visited [] = visited
-  visitVertex theGraph visited (current:n) = 
+  visitVertex theGraph visited (current:n) =
     if Set.member current visited
-      then 
+      then
         visitVertex theGraph visited n
       else
         let n' = fromJust $ neighbors theGraph current
@@ -354,7 +368,7 @@ connectedGraph g =
 
 
 -- | Create an edge description
-edge :: Vertex -> Vertex -> Edge 
+edge :: Vertex -> Vertex -> Edge
 {-# INLINE edge #-}
 edge a b = Edge a b
 
@@ -369,10 +383,10 @@ edgeEndPoints (Edge va vb) = (va,vb)
 -- | Class used to share as much code as possible between
 -- directed and undirected graphs without
 -- implementing an undirected graph as a graph where
--- we have a directed edge in both directions 
+-- we have a directed edge in both directions
 class NeighborhoodStructure n where
   -- | Return an empty neighborhood
-  emptyNeighborhood :: n 
+  emptyNeighborhood :: n
   -- | Ingoing edges
   ingoingNeighbors :: n -> [Edge]
   -- | Outgoing edge
@@ -388,11 +402,11 @@ class NeighborhoodStructure n where
 instance NeighborhoodStructure DE where
   emptyNeighborhood = DE [] []
   ingoingNeighbors (DE i _) = i
-  outgoingNeighbors (DE _ o) = o 
-  removeNeighborsEdge e (DE i o) = 
+  outgoingNeighbors (DE _ o) = o
+  removeNeighborsEdge e (DE i o) =
     let i' = filter (/= e) i
-        o' = filter (/= e) o 
-    in 
+        o' = filter (/= e) o
+    in
     DE i' o'
   addOutgoingEdge e (DE i o) = DE i (e:o)
   addIngoingEdge e (DE i o) = DE (e:i) o
@@ -402,9 +416,9 @@ instance NeighborhoodStructure UE where
   emptyNeighborhood = UE []
   ingoingNeighbors (UE e) = e
   outgoingNeighbors (UE e) = e
-  removeNeighborsEdge e (UE l) = 
+  removeNeighborsEdge e (UE l) =
     let l' = filter (/= e) l
-    in 
+    in
     UE l'
   addOutgoingEdge e (UE l) = UE (e:l)
   addIngoingEdge e (UE l) = UE (e:l)
@@ -418,7 +432,7 @@ type DirectedSG = SimpleGraph DE
 type UndirectedSG = SimpleGraph UE
 
 -- | Get the variable name mapping
-varMap :: SimpleGraph n e v -> M.Map String Vertex 
+varMap :: SimpleGraph n e v -> M.Map String Vertex
 varMap (SP _ _ n) = M.fromList . map (\(i,s) -> (s, Vertex i)) . IM.toList $ n
 
 instance (Eq a, Eq b) => Eq (SimpleGraph DE a b) where
@@ -430,23 +444,23 @@ emptySimpleGraph = SP M.empty IM.empty IM.empty
 -- | Used to prevent adding duplicates to a graph
 noRedundancy new old = old
 
-instance FactorContainer (SimpleGraph local edge) where 
-   changeFactor = changeFactorInFunctor 
+instance FactorContainer (SimpleGraph local edge) where
+   changeFactor = changeFactorInFunctor
 
-instance Functor (SimpleGraph local edge) where 
+instance Functor (SimpleGraph local edge) where
   fmap f (SP em vm nm) = SP em (IM.map (\(l,d) -> (l, f d)) vm) nm
 
-class FunctorWithVertex g where 
-   fmapWithVertex :: (Vertex -> a -> b) -> g c a -> g c b 
-   fmapWithVertexM :: Monad m => (Vertex -> a -> m b) -> g c a -> m (g c b) 
+class FunctorWithVertex g where
+   fmapWithVertex :: (Vertex -> a -> b) -> g c a -> g c b
+   fmapWithVertexM :: Monad m => (Vertex -> a -> m b) -> g c a -> m (g c b)
 
 
-instance FunctorWithVertex (SimpleGraph local) where 
+instance FunctorWithVertex (SimpleGraph local) where
     fmapWithVertex f (SP em vm nm) = SP em (IM.mapWithKey (\k (l,d) -> (l, f (Vertex k) d)) vm) nm
-    fmapWithVertexM f (SP em vm nm) = do 
+    fmapWithVertexM f (SP em vm nm) = do
       let l = IM.toList vm
-          g f (k,(l,d)) = do 
-            r <- f (Vertex k) d 
+          g f (k,(l,d)) = do
+            r <- f (Vertex k) d
             return (k,(l,r))
       rl <- mapM (g f) $ l
       let vm' = IM.fromList rl
@@ -457,19 +471,19 @@ instance F.Foldable (SimpleGraph local edge) where
   foldr f c (SP _ vm _) = IM.foldr (\(_,d) s -> f d s) c vm
 
 instance T.Traversable (SimpleGraph local edge) where
-  traverse f (SP em vm nm) = 
+  traverse f (SP em vm nm) =
     let l = IM.toList vm -- [(IM.Key, (DE, String))]
         onTriple f (k,(l,v)) = (\z -> (k,(l,z))) <$> f v
         l' = T.traverse (onTriple f) l -- f [(k,(l,z))]
         result y =  (\x -> SP em (IM.fromList x) nm) <$> y
-    in 
+    in
     result l'
 
 -- | The foldable class is limited. For a graph g we may need the vertex in addition to the value
 class FoldableWithVertex g where
-  -- | Fold with vertex 
-  foldrWithVertex :: (Vertex -> a -> b -> b) -> b -> g c a -> b 
-  foldlWithVertex' :: (b -> Vertex -> a -> b) -> b -> g c a -> b 
+  -- | Fold with vertex
+  foldrWithVertex :: (Vertex -> a -> b -> b) -> b -> g c a -> b
+  foldlWithVertex' :: (b -> Vertex -> a -> b) -> b -> g c a -> b
 
 instance FoldableWithVertex (SimpleGraph local) where
   foldrWithVertex f s (SP _ vm _) = IM.foldrWithKey (\k (_,v) y -> f (Vertex k) v y) s vm
@@ -477,7 +491,7 @@ instance FoldableWithVertex (SimpleGraph local) where
 
 _addLabeledVertex vertexName vert@(Vertex v) value (SP em vm name) =
   let vm' = IM.insertWith' noRedundancy v (emptyNeighborhood,value) vm
-      name' = IM.insert v vertexName name 
+      name' = IM.insert v vertexName name
   in
   SP em vm' name'
 
@@ -513,12 +527,12 @@ instance Graph DirectedSG where
     allEdgeValues = _allEdgeValues
     emptyGraph = _emptyGraph
     oriented _ = True
-    neighbors g v = nub <$> liftA2 (++) 
-             (map (\(Edge _ e) -> e) <$> (outgoing g v)) 
+    neighbors g v = nub <$> liftA2 (++)
+             (map (\(Edge _ e) -> e) <$> (outgoing g v))
              (map (\(Edge s _) -> s) <$> (ingoing g v))
 
 -- | Reverse edge direction
-reverseEdge :: Edge -> Edge 
+reverseEdge :: Edge -> Edge
 reverseEdge (Edge va vb) = edge vb va
 
 -- | SimpleGraph is an instance of Graph.
@@ -536,8 +550,8 @@ instance Graph UndirectedSG where
     addEdge = _addEdge
     removeEdge e g = _removeEdge (reverseEdge e) (_removeEdge e g)
     edgeVertices = _edgeVertices
-    edgeValue g e = case _edgeValue g e of 
-                       Nothing -> _edgeValue g (reverseEdge e) 
+    edgeValue g e = case _edgeValue g e of
+                       Nothing -> _edgeValue g (reverseEdge e)
                        r@(Just _) -> r
     someEdge = _someEdge
     hasNoEdges = _hasNoEdges
@@ -549,8 +563,8 @@ instance Graph UndirectedSG where
     -- ends to be sure we don not forget a vertex. In addition to that, an end may be the current vertex which
     -- is not part of the neighbors. So it has to be filtered out. Obviously, a better solution will
     -- have to be designed.
-    neighbors g v = filter (/= v) <$> nub <$> liftA2 (++) 
-       (map (\(Edge _ e) -> e) <$> (edges g v)) 
+    neighbors g v = filter (/= v) <$> nub <$> liftA2 (++)
+       (map (\(Edge _ e) -> e) <$> (edges g v))
        (map (\(Edge s _) -> s) <$> (edges g v))
 
 _emptyGraph = emptySimpleGraph
@@ -569,22 +583,22 @@ _allVertexValues (SP _ vm _) = map snd (IM.elems vm)
 
 _allEdgeValues (SP em _ _) = M.elems em
 
-_isLinkedWithAnEdge :: SimpleGraph n e v -> Vertex -> Vertex -> Bool 
+_isLinkedWithAnEdge :: SimpleGraph n e v -> Vertex -> Vertex -> Bool
 {-# INLINE _isLinkedWithAnEdge #-}
 _isLinkedWithAnEdge (SP em _ _) va vb = M.member (edge va vb) em || M.member (edge vb va) em
 
-_someVertex (SP _ vm _) = 
-  if IM.null vm 
-    then 
-      Nothing 
-    else 
+_someVertex (SP _ vm _) =
+  if IM.null vm
+    then
+      Nothing
+    else
       Just . Vertex . head . IM.keys $ vm
 
-_someEdge (SP em _ _) = 
-  if M.null em 
-    then 
-      Nothing 
-    else 
+_someEdge (SP em _ _) =
+  if M.null em
+    then
+      Nothing
+    else
       Just . head . M.keys $ em
 
 _addVertex vert@(Vertex v) value (SP em vm nm) = SP em (IM.insertWith' noRedundancy v (emptyNeighborhood,value) vm) nm
@@ -593,134 +607,134 @@ _removeVertex v@(Vertex vertex) g@(SP _ vm _)  = maybe g removeVertexWithValue $
   where
     removeVertexWithValue (n,_) = let g' = foldr _removeEdge g (ingoingNeighbors n)
                                       SP em vm' nm' = foldr _removeEdge g' (outgoingNeighbors n)
-                                  in 
+                                  in
                                   SP em (IM.delete vertex vm') nm'
 _vertexValue g@(SP _ vm _) (Vertex i) = maybe Nothing (Just . extractValue) $! (IM.lookup i vm)
   where
     extractValue (_,d) = d
 
-_changeVertexValue v@(Vertex vi) newValue g@(SP e vm nm)  = 
+_changeVertexValue v@(Vertex vi) newValue g@(SP e vm nm)  =
   let newVertexMap = do
        (n,_) <- IM.lookup vi vm
        return $ IM.insert vi (n,newValue) vm
-  in 
-  case newVertexMap of 
+  in
+  case newVertexMap of
     Nothing -> Just g
     Just nvm -> Just $ SP e nvm nm
 
-_removeEdge e@(Edge (Vertex vs) (Vertex ve)) g@(SP em vm nm)  = 
-  let r = do 
+_removeEdge e@(Edge (Vertex vs) (Vertex ve)) g@(SP em vm nm)  =
+  let r = do
         _ <- M.lookup e em -- Check e is member of the graph
         (ns,vsdata) <- IM.lookup vs vm
         (ne,vedata) <- IM.lookup ve vm
         return ((vs,(removeNeighborsEdge e ns,vsdata)),(ve,(removeNeighborsEdge e ne,vedata)))
       updateGraph ((vs,vsdata),(ve,vedata)) =
         let vm' = IM.insert ve vedata . IM.insert vs vsdata $ vm
-            em' = M.delete e em 
-        in 
+            em' = M.delete e em
+        in
         SP em' vm' nm
-  in 
+  in
   maybe g updateGraph r
 
 _edgeVertices (SP em _ _) e@(Edge vs ve) =
-     if M.member e em 
-      then 
+     if M.member e em
+      then
         Just (vs,ve)
       else
         Nothing
 
-_edgeValue :: SimpleGraph n e v -> Edge -> Maybe e 
+_edgeValue :: SimpleGraph n e v -> Edge -> Maybe e
 {-# INLINE _edgeValue #-}
 _edgeValue (SP em _ _) e = do
      v <- M.lookup e em
      return v
 
-addEdgeReference :: NeighborhoodStructure local 
-                 => Edge 
-                 -> IM.IntMap (local, vertexdata) 
-                 -> Vertex 
-                 -> Vertex 
+addEdgeReference :: NeighborhoodStructure local
+                 => Edge
+                 -> IM.IntMap (local, vertexdata)
+                 -> Vertex
+                 -> Vertex
                  -> IM.IntMap (local, vertexdata)
 {-# INLINE addEdgeReference #-}
 addEdgeReference newEdge vm (Vertex vsi) (Vertex vei) = id $! IM.adjust addi vei $! (IM.adjust addo vsi vm)
  where
-   addi (n,v) = (addIngoingEdge newEdge n,v)  
-   addo (n,v) = (addOutgoingEdge newEdge n,v)  
+   addi (n,v) = (addIngoingEdge newEdge n,v)
+   addo (n,v) = (addOutgoingEdge newEdge n,v)
 
-_addEdge :: (NeighborhoodStructure n,Graph (SimpleGraph n)) => Edge -> e -> SimpleGraph n e v -> SimpleGraph n e v 
+_addEdge :: (NeighborhoodStructure n,Graph (SimpleGraph n)) => Edge -> e -> SimpleGraph n e v -> SimpleGraph n e v
 {-# INLINE _addEdge #-}
-_addEdge newEdge@(Edge vs ve) value g@(SP em vm nm)   = 
-  if testEdgeExistence g em vs ve 
-    then 
+_addEdge newEdge@(Edge vs ve) value g@(SP em vm nm)   =
+  if testEdgeExistence g em vs ve
+    then
       g
     else
       SP (M.insert newEdge value em) (addEdgeReference newEdge vm vs ve) nm
   where
-    testEdgeExistence g em va vb = 
+    testEdgeExistence g em va vb =
       if (oriented g)
-        then 
+        then
           M.member (Edge va vb) em
-        else 
-          M.member (Edge va vb) em || M.member (Edge vb va) em 
-    
+        else
+          M.member (Edge va vb) em || M.member (Edge vb va) em
+
 
 instance UndirectedGraph UndirectedSG where
   edges g@(SP _ vm _) v@(Vertex vi) =
-      do 
+      do
         (n,_) <- IM.lookup vi vm
         return (ingoingNeighbors n)
 
 instance DirectedGraph DirectedSG where
   ingoing g@(SP _ vm _) v@(Vertex vi) =
-      do 
+      do
         (n,_) <- IM.lookup vi vm
         return (ingoingNeighbors n)
 
   outgoing g@(SP _ vm _) v@(Vertex vi) =
-      do 
+      do
         (n,_) <- IM.lookup vi vm
-        return (outgoingNeighbors n) 
+        return (outgoingNeighbors n)
 
 {-
- 
+
 Following code is used to display a graph in a form adapted to humans.
 
 -}
 
-bracketS :: String -> String 
+bracketS :: String -> String
 bracketS [] = []
 bracketS s = " [" ++ s ++ "];"
 
-createNodeStyle :: (MonadWriter String m) 
+createNodeStyle :: (MonadWriter String m)
                 => (Vertex -> n -> Maybe String)
                 -> (Vertex -> n -> Maybe String)
-                -> Maybe String 
-                -> Vertex 
-                -> n 
+                -> Maybe String
+                -> Vertex
+                -> n
                 -> m ()
-createNodeStyle nodeShape nodeColor maybeLabel v n = 
+createNodeStyle nodeShape nodeColor maybeLabel v n =
   let apply f = f v n
-      label _ _ = case maybeLabel of 
-         Nothing -> Nothing 
+      label _ _ = case maybeLabel of
+         Nothing -> Nothing
          Just s -> Just $ "label=\"" ++ s ++ "\""
-  in 
+  in
   tell $ bracketS . intercalate "," . mapMaybe apply $ [nodeShape,nodeColor, label]
-  
 
-createEdgeStyle :: (MonadWriter String m) 
+
+createEdgeStyle :: (MonadWriter String m)
                 => (Edge -> e -> Maybe String)
                 -> (Edge -> e -> Maybe String)
                 -> Edge
-                -> e 
+                -> e
                 -> m ()
-createEdgeStyle edgeShape edgeColor e n = 
+createEdgeStyle edgeShape edgeColor e n =
   let apply f = f e n
-  in 
+  in
   tell $ bracketS . intercalate "," . mapMaybe apply $ [edgeShape,edgeColor]
 
 
 
-printNode nm (Vertex k,v) = do 
+printNode nm (Vertex k,v) = do
   tell "\n"
   let r = IM.lookup k nm
   when (isJust r) $ do
@@ -731,7 +745,7 @@ printNode nm (Vertex k,v) = do
 
 addVertexToGraphviz nodeShape nodeColor nm (k,(_,v)) = do
   tell $ show k
-  let r = IM.lookup k $ nm 
+  let r = IM.lookup k $ nm
   createNodeStyle nodeShape nodeColor r (Vertex k) v
   tell "\n"
 
@@ -740,16 +754,16 @@ addVertexToUndirectedGraphviz nm (k,(_,v)) = do
   tell "\n"
 
 -- | Print the values of the graph vertices
-printGraphValues :: (Graph (SimpleGraph n), Show b) => SimpleGraph n e b -> IO () 
+printGraphValues :: (Graph (SimpleGraph n), Show b) => SimpleGraph n e b -> IO ()
 printGraphValues g@(SP _ _ nm) = putStrLn . execWriter $ mapM_ (printNode nm) (allNodes g)
 
 displaySimpleGraph :: (Vertex -> n -> Maybe String)
                    -> (Vertex -> n -> Maybe String)
                    -> (Edge -> e -> Maybe String)
                    -> (Edge -> e -> Maybe String)
-                   -> SimpleGraph local e n 
-                   -> String 
-displaySimpleGraph  nodeShape nodeColor edgeShape edgeColor g@(SP em vm nm) = execWriter $ do 
+                   -> SimpleGraph local e n
+                   -> String
+displaySimpleGraph  nodeShape nodeColor edgeShape edgeColor g@(SP em vm nm) = execWriter $ do
   tell "digraph dot {\n"
   mapM_ (addVertexToGraphviz nodeShape nodeColor  nm) $ IM.toList vm
   tell "\n"
@@ -757,13 +771,13 @@ displaySimpleGraph  nodeShape nodeColor edgeShape edgeColor g@(SP em vm nm) = ex
   tell "}\n"
    where
      addEdgeToGraphviz es ec (e@(Edge (Vertex vs) (Vertex ve)),l) = do
-       tell $ show vs 
+       tell $ show vs
        tell " -> "
        tell $ show ve
        createEdgeStyle es ec e l
-       tell "\n"  
+       tell "\n"
 
-noNodeStyle _ _ = Nothing 
+noNodeStyle _ _ = Nothing
 noEdgeStyle _ _ = Nothing
 
 instance Show (DirectedSG () CPT) where
@@ -784,16 +798,16 @@ instance (Show b, Show e) => Show (UndirectedSG e b)where
     tell "}\n"
      where
        addEdgeToGraphviz (e@(Edge (Vertex vs) (Vertex ve)),l) = do
-         tell $ show vs 
+         tell $ show vs
          tell " -- "
          tell $ show ve
          tell "\n"
 
 
 displayFactors :: (NeighborhoodStructure n, Show f, Factor f, Graph (SimpleGraph n)) => SimpleGraph n a f -> String
-displayFactors g@(SP _ _ nm) = 
+displayFactors g@(SP _ _ nm) =
   let nodes = allNodes g
-      displayFactor (Vertex i,f) = 
+      displayFactor (Vertex i,f) =
         let s = fromJust . IM.lookup i $ nm
         in
         s ++ "\n" ++ show f
@@ -834,13 +848,13 @@ getVertex a = do
 -- | Add a new labeled edge to the graph
 newEdge :: Graph g => Vertex -> Vertex -> e -> GraphMonad g e f ()
 newEdge va vb e = do
-  (aux,g) <- get 
+  (aux,g) <- get
   let g1 = addEdge (edge va vb) e g
   put $! (aux,g1)
   return ()
 
 -- | Add a node in the graph using the graph monad
-graphNode :: NamedGraph g => String -> f -> GraphMonad g e f Vertex 
+graphNode :: NamedGraph g => String -> f -> GraphMonad g e f Vertex
 graphNode vertexName initValue = do
   ((namemap,_),_) <- get
   maybe (getNewEmptyVariable (Just vertexName) initValue) returnVertex $! (M.lookup vertexName namemap)
@@ -848,9 +862,9 @@ graphNode vertexName initValue = do
     returnVertex i = return (Vertex i)
 
 -- | Generate a new unique unamed empty variable
-getNewEmptyVariable :: NamedGraph g => Maybe String -> f -> GraphMonad g e f Vertex  
-getNewEmptyVariable name initValue = do 
-  ((namemap,count),g) <- get 
+getNewEmptyVariable :: NamedGraph g => Maybe String -> f -> GraphMonad g e f Vertex
+getNewEmptyVariable name initValue = do
+  ((namemap,count),g) <- get
   let vertexName = maybe ("unamed" ++ show count) id name
       g1 = addLabeledVertex vertexName (Vertex count) initValue g
       namemap1 = M.insert vertexName count namemap
@@ -858,12 +872,12 @@ getNewEmptyVariable name initValue = do
   return (Vertex count)
 
 runGraph :: Graph g => GraphMonad g e f a -> (a,g e f)
-runGraph = removeAuxiliaryState . flip runState (emptyAuxiliaryState,emptyGraph) . runGraphMonad 
- where 
+runGraph = removeAuxiliaryState . flip runState (emptyAuxiliaryState,emptyGraph) . runGraphMonad
+ where
   removeAuxiliaryState (r,(_,g)) = (r,g)
 
 evalGraph :: Graph g => GraphMonad g e f a -> a
-evalGraph = flip evalState (emptyAuxiliaryState,emptyGraph) . runGraphMonad 
+evalGraph = flip evalState (emptyAuxiliaryState,emptyGraph) . runGraphMonad
 
 execGraph :: Graph g => GraphMonad g e f a -> g e f
-execGraph = snd . flip execState (emptyAuxiliaryState,emptyGraph) . runGraphMonad 
+execGraph = snd . flip execState (emptyAuxiliaryState,emptyGraph) . runGraphMonad
